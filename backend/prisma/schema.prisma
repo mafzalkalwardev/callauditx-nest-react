@@ -1,0 +1,148 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+}
+
+enum QuestionType {
+  YES_NO
+  RATING
+  TEXT
+  MULTIPLE_CHOICE
+}
+
+enum CallStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum EarningsType {
+  EARNING
+  DEDUCTION
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String
+  name          String
+  role          Role           @default(CLIENT)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  client        Client?
+  earnings      Earnings[]
+  notifications Notification[]
+}
+
+model Client {
+  id          String          @id @default(uuid())
+  userId      String          @unique
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String
+  balance     Float           @default(0.0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  recordings  CallRecording[]
+  categories  Category[]
+}
+
+model Category {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  clientId    String
+  client      Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  recordings  CallRecording[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([clientId, name])
+}
+
+model Question {
+  id         String       @id @default(uuid())
+  text       String
+  type       QuestionType @default(YES_NO)
+  options    String?      // Comma-separated or JSON list of options for multiple choice
+  categoryId String
+  category   Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  answers    AIAnswer[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model CallRecording {
+  id           String      @id @default(uuid())
+  filename     String
+  filepath     String
+  originalName String
+  duration     Float?      @default(0.0)
+  size         Int
+  status       CallStatus  @default(PENDING)
+  transcript   String?     @db.Text
+  summary      String?     @db.Text
+  clientId     String
+  client       Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  categoryId   String
+  category     Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  aiReview     AIReview?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model AIReview {
+  id              String         @id @default(uuid())
+  callRecordingId String         @unique
+  callRecording   CallRecording  @relation(fields: [callRecordingId], references: [id], onDelete: Cascade)
+  confidenceScore Float          @default(0.0)
+  reviewScore     Float          @default(0.0)
+  sentiment       String?        @default("NEUTRAL")
+  earningsAmount  Float          @default(0.0)
+  isFlagged       Boolean        @default(false)
+  overrideStatus  String         @default("AI") // "AI", "ADMIN_APPROVED", "ADMIN_OVERRIDDEN"
+  answers         AIAnswer[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model AIAnswer {
+  id              String   @id @default(uuid())
+  reviewId        String
+  review          AIReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answerValue     String   @db.Text
+  confidenceScore Float    @default(0.0)
+}
+
+model Earnings {
+  id           String       @id @default(uuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount       Float
+  type         EarningsType @default(EARNING)
+  description  String
+  categoryName String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
